@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "A utility module for lead time analysis"
 readme = "README.md"
 authors = [
-  { name = "User", email = "user@example.com" },
+  { name = "nagabonar27", email = "faajaramry@gmail.com" },
 ]
 classifiers = [
     "Programming Language :: Python :: 3",
