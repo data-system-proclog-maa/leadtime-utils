@@ -1,1 +1,3 @@
-from .module import has_thursday_after_5_days, has_thursday_after_5_days_vectorized, get_days_between
+from .module import has_weekday_in_range, get_days_between
+
+__all__ = ["has_weekday_in_range", "get_days_between"]
