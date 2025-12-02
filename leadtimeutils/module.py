@@ -2,76 +2,68 @@ import pandas as pd
 import numpy as np
 from typing import Union, List, Optional
 
-def has_thursday_after_5_days(start_date: pd.Timestamp, end_date: pd.Timestamp) -> bool:
+def has_weekday_in_range(df: pd.DataFrame, start_date_col: str, end_date_col: str, chosen_day: int, main_days: int) -> np.ndarray:
     """
-    Checks if there is a Thursday occurring at least 5 days after the start_date
-    and on or before the end_date.
+    Check whether a given weekday occurs in the date range
+    [start_date + main_days, end_date], excluding rows where
+    the end_date is the chosen weekday.
 
-    Args:
-        start_date (pd.Timestamp): The start date.
-        end_date (pd.Timestamp): The end date.
-
-    Returns:
-        bool: True if the condition is met, False otherwise.
-    """
-    if pd.isna(start_date) or pd.isna(end_date):
-        return False
-
-    # exclude if the end date is thursday
-    if end_date.weekday() == 3:  # 3 = Thursday
-        return False
-
-    day_diff = (end_date - start_date).days
-    if day_diff < 5:
-        return False
-
-    # generate all days between start and end
-    days = pd.date_range(start_date, end_date)
-
-    # check if there's a thursday occurring *after* 5 days from start
-    return any((d.weekday() == 3) and ((d - start_date).days >= 5) for d in days)
-
-
-def has_thursday_after_5_days_vectorized(df: pd.DataFrame, start_date_col: str, end_date_col: str) -> np.ndarray:
-    """
-    Vectorized version of has_thursday_after_5_days.
+    This function works vectorized on the entire DataFrame.
 
     Args:
         df (pd.DataFrame): The dataframe containing the dates.
         start_date_col (str): The name of the start date column.
         end_date_col (str): The name of the end date column.
+        chosen_day (int): the number for chosen days, (0=monday .... 6=sunday)
+        main_days (int): minimum days after staryt_date before checking
 
     Returns:
         np.ndarray: A boolean array indicating if the condition is met for each row.
     """
+
+    # validate input
+    if not (isinstance(chosen_day, int) and 0<=chosen_day<=6):
+        raise ValueError("chosen_day must be an integer between 0 and 6 (0=monday .... 6=sunday)")
+    if not (isinstance(main_days, int) and main_days>=0):
+        raise ValueError("main_days must be a non-negative integer")
+
+    
+    # parse date
+    if start_date_col not in df.columns:
+        raise KeyError (f"start_date_col {start_date_col} not found in dataframe")
+    if end_date_col not in df.columns:
+        raise KeyError (f"end_date_col {end_date_col} not found in dataframe")
+
     start = pd.to_datetime(df[start_date_col], errors='coerce')
     end = pd.to_datetime(df[end_date_col], errors='coerce')
     
-    # Condition 0: Dates must be valid
+    # condition 0: dates must be valid
     valid_dates = start.notna() & end.notna()
     
-    # Condition 1: End date is not Thursday
-    not_end_thursday = end.dt.weekday != 3
+    # condition 1: end date is not chosen day
+    not_end_chosen_day = end.dt.weekday != chosen_day
     
-    # Condition 2: Diff >= 5 days
-    diff_ge_5 = (end - start).dt.days >= 5
+    # condition 2: diff >= main_days days
+    diff_ge_main_days = (end - start).dt.days >= main_days
+
+    base_mask = valid_dates & not_end_chosen_day & diff_ge_main_days
+    if not base_mask.any():
+        return np.zeros(len(df), dtype=bool)
     
-    # Condition 3: There exists a Thursday T such that:
-    # start + 5 days <= T <= end
+    # compute earliest allowed day
+    start_plus_main_days = start + pd.Timedelta(days=main_days)
     
-    start_plus_5 = start + pd.Timedelta(days=5)
+    # compute number of days until chosen_days
+    days_until_chosen_day = (chosen_day - start_plus_main_days.dt.weekday) % 7
     
-    # Find the first Thursday >= start_plus_5
-    # days_until_thursday = (3 - weekday) % 7
-    days_until_thursday = (3 - start_plus_5.dt.weekday) % 7
-    first_valid_thursday = start_plus_5 + pd.to_timedelta(days_until_thursday, unit='D')
+    # first hit day
+    first_valid_chosen_day = start_plus_main_days + pd.to_timedelta(days_until_chosen_day, unit='D')
     
-    # Check if this Thursday is <= end
-    has_valid_thursday = first_valid_thursday <= end
+    # check if this Thursday is <= end
+    has_valid_chosen_day = first_valid_chosen_day <= end
     
-    # Combine all conditions
-    # We use fillna(False) to handle any NaTs that might have propagated
-    result = (valid_dates & not_end_thursday & diff_ge_5 & has_valid_thursday).fillna(False)
+    # combine all conditions
+    result = (base_mask & has_valid_chosen_day)
     
     return result.to_numpy()
 
